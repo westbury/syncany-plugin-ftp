@@ -23,11 +23,12 @@ import static org.junit.Assert.assertTrue;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.syncany.plugins.Plugins;
+import org.syncany.api.transfer.StorageException;
+import org.syncany.api.transfer.StorageTestResult;
+import org.syncany.api.transfer.TransferManager;
 import org.syncany.plugins.ftp.FtpTransferPlugin;
 import org.syncany.plugins.ftp.FtpTransferSettings;
-import org.syncany.plugins.transfer.StorageException;
-import org.syncany.plugins.transfer.StorageTestResult;
+import org.syncany.plugins.tests.AbstractTransferManager;
 
 /**
  * @author Vincent Wiencek <vwiencek@gmail.com>
@@ -52,7 +53,7 @@ public class FtpTransferManagerRepoTest {
 	}
 
 	@Test
-	public void testFtpTransferManagerEmptyFolderTestCreateTarget() throws StorageException {
+	public void testFtpTransferManagerEmptyFolderTestCreateTarget() throws Exception {
 		StorageTestResult testResult = test("/emptyFolder", true);
 
 		assertTrue(testResult.isTargetCanConnect());
@@ -63,7 +64,7 @@ public class FtpTransferManagerRepoTest {
 	}
 
 	@Test
-	public void testFtpTransferManagerEmptyFolderNoTestCreateTarget() throws StorageException {
+	public void testFtpTransferManagerEmptyFolderNoTestCreateTarget() throws Exception {
 		StorageTestResult testResult = test("/emptyFolder", false);
 
 		assertTrue(testResult.isTargetCanConnect());
@@ -74,7 +75,7 @@ public class FtpTransferManagerRepoTest {
 	}
 
 	@Test
-	public void testFtpTransferManagerValidRepoTestCreateTarget() throws StorageException {
+	public void testFtpTransferManagerValidRepoTestCreateTarget() throws Exception {
 		StorageTestResult testResult = test("/validRepo", true);
 
 		assertTrue(testResult.isTargetCanConnect());
@@ -85,7 +86,7 @@ public class FtpTransferManagerRepoTest {
 	}
 
 	@Test
-	public void testFtpTransferManagerValidRepoNoTestCreateTarget() throws StorageException {
+	public void testFtpTransferManagerValidRepoNoTestCreateTarget() throws Exception {
 		StorageTestResult testResult = test("/validRepo", false);
 
 		assertTrue(testResult.isTargetCanConnect());
@@ -96,7 +97,7 @@ public class FtpTransferManagerRepoTest {
 	}
 
 	@Test
-	public void testFtpTransferManagerNonExistingFolderTestCreateTarget() throws StorageException {
+	public void testFtpTransferManagerNonExistingFolderTestCreateTarget() throws Exception {
 		StorageTestResult testResult = test("/nonExistingFolder", true);
 
 		assertTrue(testResult.isTargetCanConnect());
@@ -107,7 +108,7 @@ public class FtpTransferManagerRepoTest {
 	}
 
 	@Test
-	public void testFtpTransferManagerNonExistingFolderNoTestCreateTarget() throws StorageException {
+	public void testFtpTransferManagerNonExistingFolderNoTestCreateTarget() throws Exception {
 		StorageTestResult testResult = test("/nonExistingFolder", false);
 
 		assertTrue(testResult.isTargetCanConnect());
@@ -121,14 +122,15 @@ public class FtpTransferManagerRepoTest {
 		FtpTransferSettings connection = workingConnection();
 		connection.setPath(path);
 
-		return getPlugin().createTransferManager(connection, null).test(testCreateTarget);
+		TransferManager transferManager = connection.createTransferManager(null);
+		return new AbstractTransferManager(transferManager).test(testCreateTarget);
 	}
 
 	public FtpTransferPlugin getPlugin() {
-		return (FtpTransferPlugin) Plugins.get("ftp");
+		return new FtpTransferPlugin();
 	}
 
-	public FtpTransferSettings workingConnection() throws StorageException {
+	public FtpTransferSettings workingConnection() {
 		FtpTransferSettings connection = (FtpTransferSettings) getPlugin().createEmptySettings();
 
 		connection.setHostname(EmbeddedTestFtpServer.HOST);

@@ -21,6 +21,7 @@ import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.net.SocketException;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -39,7 +40,6 @@ import org.apache.ftpserver.usermanager.PropertiesUserManagerFactory;
 import org.apache.ftpserver.usermanager.SaltedPasswordEncryptor;
 import org.apache.ftpserver.usermanager.impl.BaseUser;
 import org.apache.ftpserver.usermanager.impl.WritePermission;
-import org.syncany.tests.util.TestFileUtil;
 
 /**
  * @author vincent
@@ -86,7 +86,7 @@ public class EmbeddedTestFtpServer {
 		userFile = File.createTempFile("testftpuserfile", "tmp");
 		userFile.deleteOnExit();
 		
-		rootDir = TestFileUtil.createTempDirectoryInSystemTemp();
+		rootDir = Files.createTempDirectory("syncanytest").toFile();
 		rootDir.deleteOnExit();
 
 		// Add FTP users

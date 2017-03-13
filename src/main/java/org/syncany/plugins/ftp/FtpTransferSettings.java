@@ -17,10 +17,11 @@
  */
 package org.syncany.plugins.ftp;
 
-import org.simpleframework.xml.Element;
-import org.syncany.plugins.transfer.Encrypted;
-import org.syncany.plugins.transfer.Setup;
-import org.syncany.plugins.transfer.TransferSettings;
+import org.syncany.api.transfer.ICache;
+import org.syncany.api.transfer.PropertyVisitor;
+import org.syncany.api.transfer.StorageException;
+import org.syncany.api.transfer.TransferManager;
+import org.syncany.api.transfer.TransferSettings;
 
 /**
  * The FTP connection represents the settings required to connect to an
@@ -29,26 +30,15 @@ import org.syncany.plugins.transfer.TransferSettings;
  *
  * @author Philipp C. Heckel <philipp.heckel@gmail.com>
  */
-public class FtpTransferSettings extends TransferSettings {
-	@Element(name = "hostname", required = true)
-	@Setup(order = 1, description = "Hostname")
+public class FtpTransferSettings implements TransferSettings {
 	private String hostname;
 	
-	@Element(name = "username", required = true)
-	@Setup(order = 2, description = "Username")
 	private String username;
 	
-	@Element(name = "password", required = true)
-	@Setup(order = 3, sensitive = true, description = "Password")
-	@Encrypted
 	private String password;
 	
-	@Element(name = "path", required = true)
-	@Setup(order = 4, description = "Relative path")
 	private String path;
 	
-	@Element(name = "port", required = false)
-	@Setup(order = 5, description = "Port")
 	private int port = 21;
 
 	public String getHostname() {
@@ -94,5 +84,38 @@ public class FtpTransferSettings extends TransferSettings {
 	@Override
 	public String toString() {
 		return FtpTransferSettings.class.getSimpleName() + "[hostname=" + hostname + ":" + port + ", username=" + username + ", path=" + path + "]";
+	}
+
+	@Override
+	public void visitProperties(PropertyVisitor visitor) {
+		visitor.stringProperty("hostname", "Host Name", true, false, true, false, true, this::getHostname, this::setHostname);
+		visitor.stringProperty("username", "User Name", true, false, true, false, true, this::getUsername, this::setUsername);
+		visitor.stringProperty("password", "Password", true, true, true, false, true, this::getPassword, this::setPassword);
+		visitor.stringProperty("path", "Relative path", true, false, true, false, true, this::getPath, this::setPath);
+		visitor.integerProperty("port", "Port", true, false, true, false, true, this::getPort, this::setPort);
+	}
+
+	@Override
+	public TransferManager createTransferManager(ICache cache) throws StorageException {
+		if (!isValid()) {
+			throw new StorageException("invalid settings");
+		}
+		return new FtpTransferManager(hostname, username, password, path, port, cache);
+	}
+
+	@Override
+	public String getType() {
+		return "ftp";
+	}
+
+	@Override
+	public boolean isValid() {
+		return hostname != null && path != null;
+	}
+
+	@Override
+	public String getReasonForLastValidationFail() {
+		// TODO Auto-generated method stub
+		return null;
 	}
 }

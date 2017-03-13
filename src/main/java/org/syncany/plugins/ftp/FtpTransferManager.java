@@ -24,29 +24,23 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.net.ftp.FTPClient;
 import org.apache.commons.net.ftp.FTPFile;
-import org.syncany.config.Config;
-import org.syncany.plugins.transfer.AbstractTransferManager;
-import org.syncany.plugins.transfer.StorageException;
-import org.syncany.plugins.transfer.StorageFileNotFoundException;
-import org.syncany.plugins.transfer.StorageMoveException;
-import org.syncany.plugins.transfer.TransferManager;
-import org.syncany.plugins.transfer.files.ActionRemoteFile;
-import org.syncany.plugins.transfer.files.CleanupRemoteFile;
-import org.syncany.plugins.transfer.files.DatabaseRemoteFile;
-import org.syncany.plugins.transfer.files.MultichunkRemoteFile;
-import org.syncany.plugins.transfer.files.RemoteFile;
-import org.syncany.plugins.transfer.files.SyncanyRemoteFile;
-import org.syncany.plugins.transfer.files.TempRemoteFile;
-import org.syncany.plugins.transfer.files.TransactionRemoteFile;
-import org.syncany.util.StringUtil;
+import org.syncany.api.transfer.ICache;
+import org.syncany.api.transfer.RemoteFile;
+import org.syncany.api.transfer.RemoteFileFactory;
+import org.syncany.api.transfer.StorageException;
+import org.syncany.api.transfer.StorageFileNotFoundException;
+import org.syncany.api.transfer.StorageMoveException;
+import org.syncany.api.transfer.TransferManager;
+import org.syncany.api.transfer.features.PathAwareRemoteFileType;
 
 /**
  * Implements a {@link TransferManager} based on an FTP storage backend for the
@@ -67,7 +61,7 @@ import org.syncany.util.StringUtil;
  * 
  * @author Philipp C. Heckel <philipp.heckel@gmail.com>
  */
-public class FtpTransferManager extends AbstractTransferManager {
+public class FtpTransferManager implements TransferManager {
 	private static final Logger logger = Logger.getLogger(FtpTransferManager.class.getSimpleName());
 
 	private static final int CONNECT_RETRY_COUNT = 2;
@@ -75,32 +69,50 @@ public class FtpTransferManager extends AbstractTransferManager {
 	private static final int TIMEOUT_CONNECT = 5000;
 	private static final int TIMEOUT_DATA = 5000;
 
-	private FTPClient ftp;
+	private final FTPClient ftp;
 	private boolean ftpIsLoggedIn;
 
-	private String repoPath;
-	private String multichunksPath;
-	private String databasesPath;
-	private String actionsPath;
-	private String transactionsPath;
-	private String temporaryPath;
+	private final String repoPath;
+	private final String multichunksPath;
+	private final String databasesPath;
+	private final String actionsPath;
+	private final String transactionsPath;
+	private final String temporaryPath;
 
-	public FtpTransferManager(FtpTransferSettings connection, Config config) {
-		super(connection, config);
+	private final String hostname;
 
+	private final String username;
+
+	private final String password;
+
+	private final int port;
+
+	private ICache cache;
+
+	/**
+	 * @param hostname
+	 * @param username
+	 * @param password
+	 * @param path
+	 * @param port
+	 * @param cache
+	 */
+	public FtpTransferManager(String hostname, String username, String password, String path, int port, ICache cache) {
+		this.hostname = hostname;
+		this.username = username;
+		this.password = password;
+		this.port = port;
+		this.cache = cache;
+		
 		this.ftp = new FTPClient();
 		this.ftpIsLoggedIn = false;
 
-		this.repoPath = connection.getPath().startsWith("/") ? connection.getPath() : "/" + connection.getPath();
+		this.repoPath = path.startsWith("/") ? path : "/" + path;
 		this.multichunksPath = repoPath + "/multichunks";
 		this.databasesPath = repoPath + "/databases";
 		this.actionsPath = repoPath + "/actions";
 		this.transactionsPath = repoPath + "/transactions";
 		this.temporaryPath = repoPath + "/temporary";
-	}
-
-	private FtpTransferSettings getSettings() {
-		return (FtpTransferSettings) settings;
 	}
 
 	@Override
@@ -113,17 +125,17 @@ public class FtpTransferManager extends AbstractTransferManager {
 				}
 
 				if (logger.isLoggable(Level.INFO)) {
-					logger.log(Level.INFO, "FTP client connecting to {0}:{1} ...", new Object[] { getSettings().getHostname(),
-							getSettings().getPort() });
+					logger.log(Level.INFO, "FTP client connecting to {0}:{1} ...", new Object[] { hostname,
+							port });
 				}
 
 				ftp.setConnectTimeout(TIMEOUT_CONNECT);
 				ftp.setDataTimeout(TIMEOUT_DATA);
 				ftp.setDefaultTimeout(TIMEOUT_DEFAULT);
 
-				ftp.connect(getSettings().getHostname(), getSettings().getPort());
+				ftp.connect(hostname, port);
 
-				if (!ftp.login(getSettings().getUsername(), getSettings().getPassword())) {
+				if (!ftp.login(username, password)) {
 					throw new StorageException("Invalid FTP login credentials. Cannot login.");
 				}
 
@@ -159,11 +171,11 @@ public class FtpTransferManager extends AbstractTransferManager {
 	}
 
 	@Override
-	public void init(boolean createIfRequired) throws StorageException {
+	public void init(boolean createIfRequired, RemoteFile syncanyRemoteFile) throws StorageException {
 		connect();
 
 		try {
-			if (!testRepoFileExists() && createIfRequired) {
+			if (!testRepoFileExists(syncanyRemoteFile) && createIfRequired) {
 				ftp.mkd(repoPath);
 			}
 
@@ -187,7 +199,7 @@ public class FtpTransferManager extends AbstractTransferManager {
 
 		try {
 			// Download file
-			File tempFile = createTempFile(localFile.getName());
+			File tempFile = cache.createTempFile(localFile.getName());
 			OutputStream tempFOS = new FileOutputStream(tempFile);
 
 			if (logger.isLoggable(Level.INFO)) {
@@ -310,25 +322,27 @@ public class FtpTransferManager extends AbstractTransferManager {
 	}
 
 	@Override
-	public <T extends RemoteFile> Map<String, T> list(Class<T> remoteFileClass) throws StorageException {
+	public <T extends RemoteFile> Collection<T> list(PathAwareRemoteFileType remoteFileType, RemoteFileFactory<T> factory) throws StorageException {
 		connect();
 
 		try {
 			// List folder
-			String remoteFilePath = getRemoteFilePath(remoteFileClass);
+			String remoteFilePath = getRemoteFilePath(remoteFileType);
 			FTPFile[] ftpFiles = ftp.listFiles(remoteFilePath + "/");
 
 			// Create RemoteFile objects
-			Map<String, T> remoteFiles = new HashMap<String, T>();
+			Set<T> remoteFiles = new HashSet<T>();
 
 			for (FTPFile file : ftpFiles) {
+				if (file.isFile()) {
 				try {
-					T remoteFile = RemoteFile.createRemoteFile(file.getName(), remoteFileClass);
-					remoteFiles.put(file.getName(), remoteFile);
+					T remoteFile = factory.createRemoteFile(file.getName());
+					remoteFiles.add(remoteFile);
 				}
 				catch (Exception e) {
-					logger.log(Level.INFO, "Cannot create instance of " + remoteFileClass.getSimpleName() + " for file " + file
+					logger.log(Level.INFO, "Cannot create instance of " + remoteFileType + " for file " + file
 							+ "; maybe invalid file name pattern. Ignoring file.");
+				}
 				}
 			}
 
@@ -352,26 +366,23 @@ public class FtpTransferManager extends AbstractTransferManager {
 	}
 
 	private String getRemoteFile(RemoteFile remoteFile) {
-		return getRemoteFilePath(remoteFile.getClass()) + "/" + remoteFile.getName();
+		return getRemoteFilePath(remoteFile.getPathAwareType()) + "/" + remoteFile.getName();
 	}
 
-	private String getRemoteFilePath(Class<? extends RemoteFile> remoteFile) {
-		if (remoteFile.equals(MultichunkRemoteFile.class)) {
+	public String getRemoteFilePath(PathAwareRemoteFileType remoteFileType) {
+		switch (remoteFileType) {
+		case Multichunk: 
 			return multichunksPath;
-		}
-		else if (remoteFile.equals(DatabaseRemoteFile.class) || remoteFile.equals(CleanupRemoteFile.class)) {
+		case Database:
+		case Cleanup:
 			return databasesPath;
-		}
-		else if (remoteFile.equals(ActionRemoteFile.class)) {
+		case Action:
 			return actionsPath;
-		}
-		else if (remoteFile.equals(TransactionRemoteFile.class)) {
+		case Transaction:
 			return transactionsPath;
-		}
-		else if (remoteFile.equals(TempRemoteFile.class)) {
+		case Temp:
 			return temporaryPath;
-		}
-		else {
+		default:
 			return repoPath;
 		}
 	}
@@ -453,9 +464,8 @@ public class FtpTransferManager extends AbstractTransferManager {
 	}
 
 	@Override
-	public boolean testRepoFileExists() {
+	public boolean testRepoFileExists(RemoteFile repoFile) {
 		try {
-			SyncanyRemoteFile repoFile = new SyncanyRemoteFile();
 			String repoFilePath = getRemoteFile(repoFile);
 			
 			String repoFileParentPath = (repoFilePath.indexOf("/") != -1) ? repoFilePath.substring(0, repoFilePath.lastIndexOf("/")) : "";
@@ -469,7 +479,7 @@ public class FtpTransferManager extends AbstractTransferManager {
 					}
 				}
 				
-				logger.log(Level.INFO, "testRepoFileExists: Repo file DOES NOT exist: list(repo) DID NOT contain 'syncany' file:\n" + StringUtil.join(listRepoFile, "\n"));
+				logger.log(Level.INFO, "testRepoFileExists: Repo file DOES NOT exist: list(repo) DID NOT contain 'syncany' file:\n" + join(listRepoFile, "\n"));
 				return false;				
 			}
 			else {
@@ -482,4 +492,18 @@ public class FtpTransferManager extends AbstractTransferManager {
 			return false;
 		}
 	}
+	
+	public static <T> String join(T[] objects, String delimiter) {
+		StringBuilder objectsStr = new StringBuilder();
+		
+		for (int i=0; i<objects.length; i++) {
+			objectsStr.append(objects[i].toString());
+			if (i < objects.length-1) { 
+				objectsStr.append(delimiter);
+			}			
+		}
+		
+		return objectsStr.toString();
+	}   
+	
 }

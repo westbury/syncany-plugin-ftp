@@ -22,7 +22,7 @@ import java.util.Map;
 
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.syncany.tests.plugins.AbstractTransferManagerTest;
+import org.syncany.plugins.tests.AbstractTransferManagerTest;
 
 /**
  * @author Vincent Wiencek <vwiencek@gmail.com>

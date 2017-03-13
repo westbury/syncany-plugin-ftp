@@ -17,21 +17,6 @@
  */
 package org.syncany.tests.cli;
 
-import static org.junit.Assert.assertTrue;
-
-import java.io.File;
-import java.util.Map;
-
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-//import org.junit.contrib.java.lang.system.TextFromStandardInputStream;
-import org.syncany.tests.plugins.ftp.EmbeddedTestFtpServer;
-import org.syncany.tests.util.TestConfigUtil;
-import org.syncany.tests.util.TestFileUtil;
-import org.syncany.util.StringUtil;
-
 //import static org.junit.contrib.java.lang.system.TextFromStandardInputStream.emptyStandardInputStream;
 
 public class InitAndConnectCommandNoEncryptionTest {	

@@ -17,8 +17,9 @@
  */
 package org.syncany.plugins.ftp;
 
-import org.syncany.plugins.Plugin;
-import org.syncany.plugins.transfer.TransferPlugin;
+import org.syncany.api.transfer.Plugin;
+import org.syncany.api.transfer.TransferPlugin;
+import org.syncany.api.transfer.TransferSettings;
 
 /**
  * Identifies the FTP-based storage {@link Plugin} for Syncany. 
@@ -29,8 +30,26 @@ import org.syncany.plugins.transfer.TransferPlugin;
  * 
  * @author Philipp C. Heckel <philipp.heckel@gmail.com>
  */
-public class FtpTransferPlugin extends TransferPlugin {
-	public FtpTransferPlugin() {
-		super("ftp");
+public class FtpTransferPlugin implements TransferPlugin {
+
+	@Override
+	public String getId() {
+		return "ftp";
+	}
+
+	@Override
+	public String getName() {
+		return "FTP";
+	}
+
+	@Override
+	public String getVersion() {
+		// TODO Get this from manifest, or do we need this at all?
+		return "0.5";
+	}
+
+	@Override
+	public TransferSettings createEmptySettings() {
+		return new FtpTransferSettings();
 	}
 }
